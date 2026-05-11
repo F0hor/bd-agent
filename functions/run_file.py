@@ -1,5 +1,6 @@
 import os
 import subprocess
+from google import genai
 
 
 def run_python_file(working_directory, file_path, args=None):
@@ -40,3 +41,25 @@ def run_python_file(working_directory, file_path, args=None):
         return ret_str
     except Exception as e:
         raise e
+    
+schema_run_python_file = genai.types.FunctionDeclaration(
+    name="run_python_file",
+    description="Returns the exit code along with contents of STDOUT and STDERR (if both STDOUT and STDERR are empty returns 'No output produced' instead)",
+    parameters=genai.types.Schema(
+        type=genai.types.Type.OBJECT,
+        required=['file_path'],
+        properties={
+            "file_path": genai.types.Schema(
+                type=genai.types.Type.STRING,
+                description="File path to python file to be executed, relative to the working directory",
+            ),
+            "args": genai.types.Schema(
+                type=genai.types.Type.ARRAY,
+                items=genai.types.Schema(
+                    type=genai.types.Type.STRING
+                ),
+                description="List of arguments to be passed to the executed file"
+            )
+        },
+    ),
+)
