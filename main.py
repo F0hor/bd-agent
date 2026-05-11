@@ -3,7 +3,7 @@ import argparse
 from dotenv import load_dotenv
 from google import genai
 
-from functions.call_funcs import available_functions
+from functions.call_funcs import available_functions, call_function
 
 
 system_prompt = """
@@ -54,7 +54,20 @@ if args.verbose == True:
     print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
 if response.function_calls != None:
+    result_parts = []
     for call in response.function_calls:
-        print(f"Calling function: {call.name}({call.args})")
+        result = call_function(call, args.verbose)
+        if result.parts == None or result.parts == []:
+            raise Exception(f"Function ({call.name}) call result returned with None or empty parts list")
+        
+        result_response = result.parts[0].function_response
+        if result_response == None:
+            raise Exception("Function call response object is None")
+        if result_response.response == None or result_response.response == dict():
+            raise Exception("Response atribute of function call response object is None or empty")
+        
+        result_parts.append(result.parts[0])
+        if args.verbose:
+            print(f"-> {result.parts[0].function_response.response}")
 else:
     print(response.text)
