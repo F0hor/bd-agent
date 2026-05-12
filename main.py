@@ -6,6 +6,9 @@ from google import genai
 from functions.call_funcs import available_functions, call_function
 
 
+MAX_AGENT_ITER = 20
+
+
 system_prompt = """
 You are a helpful AI coding agent.
 
@@ -37,37 +40,49 @@ client = genai.Client(api_key=api_key)
 
 messages = [genai.types.Content(role="user", parts=[genai.types.Part(text=args.user_prompt)])]
 
-response = client.models.generate_content(
-    model='gemini-2.5-flash', 
-    contents=messages,
-    config=genai.types.GenerateContentConfig(
-        tools=[available_functions], system_instruction=system_prompt#, temperature=0
-        ),
-    )
+for _ in range(MAX_AGENT_ITER):
+    response = client.models.generate_content(
+        model='gemini-2.5-flash', 
+        contents=messages,
+        config=genai.types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt#, temperature=0
+            ),
+        )
 
-if response.usage_metadata.candidates_token_count == None:
-    raise Exception("No response metadata")
+    if response.usage_metadata.candidates_token_count == None:
+        raise Exception("No response metadata")
 
-if args.verbose == True:
-    print(f"User prompt: {args.user_prompt}")
-    print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-    print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+    if args.verbose == True:
+        print(f"User prompt: {args.user_prompt}")
+        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
-if response.function_calls != None:
-    result_parts = []
-    for call in response.function_calls:
-        result = call_function(call, args.verbose)
-        if result.parts == None or result.parts == []:
-            raise Exception(f"Function ({call.name}) call result returned with None or empty parts list")
-        
-        result_response = result.parts[0].function_response
-        if result_response == None:
-            raise Exception("Function call response object is None")
-        if result_response.response == None or result_response.response == dict():
-            raise Exception("Response atribute of function call response object is None or empty")
-        
-        result_parts.append(result.parts[0])
-        if args.verbose:
-            print(f"-> {result.parts[0].function_response.response}")
-else:
-    print(response.text)
+    if response.candidates != None and response.candidates != []:
+        for cand in response.candidates:
+            messages.append(cand)
+
+    if response.function_calls != None:
+        result_parts = []
+        for call in response.function_calls:
+            result = call_function(call, args.verbose)
+            if result.parts == None or result.parts == []:
+                raise Exception(f"Function ({call.name}) call result returned with None or empty parts list")
+            
+            result_response = result.parts[0].function_response
+            if result_response == None:
+                raise Exception("Function call response object is None")
+            if result_response.response == None or result_response.response == dict():
+                raise Exception("Response atribute of function call response object is None or empty")
+            
+            result_parts.append(result.parts[0])
+            if args.verbose:
+                print(f"-> {result.parts[0].function_response.response}")
+
+        messages.append(genai.types.Content(role="user", parts=result_parts))
+    else:
+        print('Final response:')
+        print(response.text)
+        exit(0)
+
+print("The agent has reached maximal number of iterations allowed without a text response, this may indicate that the agent was not able to finish its task")
+exit(1)
